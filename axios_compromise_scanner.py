@@ -193,15 +193,13 @@ def check_lockfile_for_versions(path: Path, findings: List[Finding]) -> None:
                     "plain-crypto-js appeared in the axios compromise chain and should not be present in normal axios installs."
                 ),
             )
-            )
+        )
 
 
 def check_generic_json_for_indicators(path: Path, findings: List[Finding]) -> None:
     text = safe_read(path)
     if not text:
         return
-
-    matched = False
 
     # Structured parse for JSON content.
     try:
@@ -211,7 +209,6 @@ def check_generic_json_for_indicators(path: Path, findings: List[Finding]) -> No
 
     if isinstance(parsed, (dict, list)):
         def recurse(obj: object) -> None:
-            nonlocal matched
             if isinstance(obj, dict):
                 if obj.get("name") == "axios" and str(obj.get("version", "")) in MALICIOUS_AXIOS_VERSIONS:
                     version = str(obj.get("version", "")).strip()
@@ -224,7 +221,6 @@ def check_generic_json_for_indicators(path: Path, findings: List[Finding]) -> No
                             details="Structured JSON parsing identified a known malicious axios version field.",
                         )
                     )
-                    matched = True
                 for key, value in obj.items():
                     if key == "axios" and isinstance(value, dict):
                         version = str(value.get("version", "")).strip()
@@ -238,7 +234,6 @@ def check_generic_json_for_indicators(path: Path, findings: List[Finding]) -> No
                                     details="Structured JSON parsing identified axios object with malicious version.",
                                 )
                             )
-                            matched = True
                     recurse(value)
             elif isinstance(obj, list):
                 for item in obj:
@@ -247,13 +242,11 @@ def check_generic_json_for_indicators(path: Path, findings: List[Finding]) -> No
         recurse(parsed)
 
     # Regex pass is always applied as an additional safety net.
-    regex_hit = False
     for version in MALICIOUS_AXIOS_VERSIONS:
         if re.search(rf"axios(?:@|\s|/)?{re.escape(version)}", text) or re.search(
             rf"\"axios\"\\s*:\\s*\\{{[^\\}}]*\"version\"\\s*:\\s*\"{re.escape(version)}\"",
             text,
         ):
-            regex_hit = True
             findings.append(
                 Finding(
                     severity="critical",
@@ -265,7 +258,6 @@ def check_generic_json_for_indicators(path: Path, findings: List[Finding]) -> No
             )
 
     if re.search(r"plain-crypto-js", text):
-        regex_hit = True
         findings.append(
             Finding(
                 severity="high",
@@ -275,10 +267,6 @@ def check_generic_json_for_indicators(path: Path, findings: List[Finding]) -> No
                 details="Regex scanning found plain-crypto-js token in JSON content; investigate dependency chain.",
             )
         )
-
-    # Avoid silent no-op for JSON files that had no indicators.
-    _ = matched or regex_hit
-
 
 def check_installed_node_modules(root: Path, findings: List[Finding]) -> None:
     axios_pkg = root / "node_modules" / "axios" / "package.json"

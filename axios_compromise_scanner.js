@@ -130,7 +130,7 @@ function checkLockfileForVersions(filePath, findings) {
   }
 
   for (const version of MALICIOUS_AXIOS_VERSIONS) {
-    const rx = new RegExp(`axios(?:@|\\s|/)?${version.replace('.', '\\.').replace('.', '\\.')}`);
+    const rx = new RegExp(`axios(?:@|\\s|/)?${version.replace(/\./g, '\\.')}`);
     if (rx.test(text)) addAxiosFinding(findings, filePath, version);
   }
 
@@ -197,8 +197,8 @@ function checkGenericJsonForIndicators(filePath, findings) {
   if (parsed && typeof parsed === 'object') walk(parsed);
 
   for (const version of MALICIOUS_AXIOS_VERSIONS) {
-    const rx1 = new RegExp(`axios(?:@|\\s|/)?${version.replace('.', '\\.').replace('.', '\\.')}`);
-    const rx2 = new RegExp(`"axios"\\s*:\\s*\\{[^\\}]*"version"\\s*:\\s*"${version.replace('.', '\\.').replace('.', '\\.')}"`);
+    const rx1 = new RegExp(`axios(?:@|\\s|/)?${version.replace(/\./g, '\\.')}`);
+    const rx2 = new RegExp(`"axios"\\s*:\\s*\\{[^\\}]*"version"\\s*:\\s*"${version.replace(/\./g, '\\.')}"`);
     if (rx1.test(text) || rx2.test(text)) {
       findings.push(
         finding(
