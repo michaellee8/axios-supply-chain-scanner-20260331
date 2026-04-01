@@ -281,53 +281,61 @@ def check_generic_json_for_indicators(path: Path, findings: List[Finding]) -> No
 
 
 def check_installed_node_modules(root: Path, findings: List[Finding]) -> None:
-    axios_pkg = root / "node_modules" / "axios" / "package.json"
-    if axios_pkg.exists():
-        try:
-            data = json.loads(safe_read(axios_pkg) or "{}")
-        except json.JSONDecodeError:
-            data = {}
-        version = str(data.get("version", "")).strip()
-        if version in MALICIOUS_AXIOS_VERSIONS:
+    # Recursively inspect all node_modules directories under root so scans work on
+    # full home directories / monorepos, not only a single project root.
+    for dirpath, dirnames, _filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        if "node_modules" not in dirnames:
+            continue
+
+        node_modules_dir = Path(dirpath) / "node_modules"
+        axios_pkg = node_modules_dir / "axios" / "package.json"
+        if axios_pkg.exists():
+            try:
+                data = json.loads(safe_read(axios_pkg) or "{}")
+            except json.JSONDecodeError:
+                data = {}
+            version = str(data.get("version", "")).strip()
+            if version in MALICIOUS_AXIOS_VERSIONS:
+                findings.append(
+                    Finding(
+                        severity="critical",
+                        category="installed-package",
+                        path=str(axios_pkg),
+                        summary=f"Installed axios version is malicious: {version}",
+                        details="Known compromised version discovered directly in nested node_modules.",
+                    )
+                )
+
+        plain_crypto_dir = node_modules_dir / MALICIOUS_DEPENDENCY
+        if plain_crypto_dir.exists():
+            details = (
+                "Directory exists. Huntress notes presence of node_modules/plain-crypto-js can indicate compromise, "
+                "even if package contents look benign after self-cleanup."
+            )
+            pkg = plain_crypto_dir / "package.json"
+            version = ""
+            if pkg.exists():
+                try:
+                    version = str(json.loads(safe_read(pkg) or "{}").get("version", "")).strip()
+                except json.JSONDecodeError:
+                    pass
+            if version in SUSPICIOUS_PLAIN_CRYPTO_VERSIONS:
+                sev = "critical"
+                details += f" package.json reports suspicious version {version}."
+            else:
+                sev = "high"
+                if version:
+                    details += f" package.json reports version {version}; this can be spoofed post-infection."
             findings.append(
                 Finding(
-                    severity="critical",
+                    severity=sev,
                     category="installed-package",
-                    path=str(axios_pkg),
-                    summary=f"Installed axios version is malicious: {version}",
-                    details="Known compromised version discovered directly in node_modules.",
+                    path=str(plain_crypto_dir),
+                    summary="Suspicious dependency directory detected: node_modules/plain-crypto-js",
+                    details=details,
                 )
             )
-
-    plain_crypto_dir = root / "node_modules" / MALICIOUS_DEPENDENCY
-    if plain_crypto_dir.exists():
-        details = (
-            "Directory exists. Huntress notes presence of node_modules/plain-crypto-js can indicate compromise, "
-            "even if package contents look benign after self-cleanup."
-        )
-        pkg = plain_crypto_dir / "package.json"
-        version = ""
-        if pkg.exists():
-            try:
-                version = str(json.loads(safe_read(pkg) or "{}").get("version", "")).strip()
-            except json.JSONDecodeError:
-                pass
-        if version in SUSPICIOUS_PLAIN_CRYPTO_VERSIONS:
-            sev = "critical"
-            details += f" package.json reports suspicious version {version}."
-        else:
-            sev = "high"
-            if version:
-                details += f" package.json reports version {version}; this can be spoofed post-infection."
-        findings.append(
-            Finding(
-                severity=sev,
-                category="installed-package",
-                path=str(plain_crypto_dir),
-                summary="Suspicious dependency directory detected: node_modules/plain-crypto-js",
-                details=details,
-            )
-        )
 
 
 def check_host_iocs(findings: List[Finding]) -> None:
@@ -464,6 +472,21 @@ def run_self_test() -> int:
             "node_modules_plain_crypto",
             compromised2.compromised is True and has_plain_crypto,
             f"findings={len(compromised2.findings)}",
+        )
+
+        # Test 4: nested node_modules under a deeper directory should still be found.
+        nested_axios = root / "users" / "example" / "project" / "node_modules" / "axios"
+        nested_axios.mkdir(parents=True, exist_ok=True)
+        (nested_axios / "package.json").write_text(
+            json.dumps({"name": "axios", "version": "0.30.4"}),
+            encoding="utf-8",
+        )
+        compromised3 = run_scan(root)
+        has_nested_axios = any("installed axios version is malicious" in f.summary.lower() for f in compromised3.findings)
+        record(
+            "nested_node_modules_recursive_scan",
+            compromised3.compromised is True and has_nested_axios,
+            f"findings={len(compromised3.findings)}",
         )
 
     print("Self-test results:")
