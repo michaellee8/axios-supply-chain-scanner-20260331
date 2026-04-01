@@ -49,6 +49,10 @@ const FILE_IOCS = [
 const LOCKFILE_CANDIDATES = new Set(['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml']);
 const SKIP_DIRS = new Set(['.git', '.hg', '.svn', '.next', '.turbo', '.cache', 'dist', 'build', 'coverage']);
 
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function finding(severity, category, fpath, summary, details) {
   return { severity, category, path: fpath, summary, details };
 }
@@ -130,7 +134,7 @@ function checkLockfileForVersions(filePath, findings) {
   }
 
   for (const version of MALICIOUS_AXIOS_VERSIONS) {
-    const rx = new RegExp(`axios(?:@|\\s|/)?${version.replace('.', '\\.').replace('.', '\\.')}`);
+    const rx = new RegExp(`axios(?:@|\\s|/)?${escapeRegExp(version)}`);
     if (rx.test(text)) addAxiosFinding(findings, filePath, version);
   }
 
@@ -197,8 +201,8 @@ function checkGenericJsonForIndicators(filePath, findings) {
   if (parsed && typeof parsed === 'object') walk(parsed);
 
   for (const version of MALICIOUS_AXIOS_VERSIONS) {
-    const rx1 = new RegExp(`axios(?:@|\\s|/)?${version.replace('.', '\\.').replace('.', '\\.')}`);
-    const rx2 = new RegExp(`"axios"\\s*:\\s*\\{[^\\}]*"version"\\s*:\\s*"${version.replace('.', '\\.').replace('.', '\\.')}"`);
+    const rx1 = new RegExp(`axios(?:@|\\s|/)?${escapeRegExp(version)}`);
+    const rx2 = new RegExp(`"axios"\\s*:\\s*\\{[^\\}]*"version"\\s*:\\s*"${escapeRegExp(version)}"`);
     if (rx1.test(text) || rx2.test(text)) {
       findings.push(
         finding(
