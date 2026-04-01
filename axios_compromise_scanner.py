@@ -250,7 +250,7 @@ def check_generic_json_for_indicators(path: Path, findings: List[Finding]) -> No
     regex_hit = False
     for version in MALICIOUS_AXIOS_VERSIONS:
         if re.search(rf"axios(?:@|\s|/)?{re.escape(version)}", text) or re.search(
-            rf"\"axios\"\\s*:\\s*\\{{[^\\}}]*\"version\"\\s*:\\s*\"{re.escape(version)}\"",
+            rf'''"axios"\s*:\s*\{{[^}}]*"version"\s*:\s*"{re.escape(version)}"''',
             text,
         ):
             regex_hit = True
